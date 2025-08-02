@@ -13,7 +13,7 @@ A Go library for verifying Commercial Bank of Ethiopia (CBE) transaction receipt
 ## Installation
 
 ```bash
-go get github.com/yourusername/cbe-verifier
+go get github.com/Zahir-Seid/cbe-verifier
 ```
 
 ## Quick Start
