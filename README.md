@@ -1,279 +1,189 @@
 # CBE Verifier Go Library
 
-A Go library for verifying Commercial Bank of Ethiopia (CBE) transaction receipts by fetching and parsing official PDF documents from the bank's servers.
+A Go library for verifying Commercial Bank of Ethiopia (CBE) payment
+receipts against the bank's official records. It supports **both** CBE
+platforms and picks the right one automatically from the shape of the
+reference you give it:
 
-## Features
+| Input | Backend |
+| --- | --- |
+| Bare legacy reference (`FT25062PP5ZB`) + account suffix | Legacy PDF service (`apps.cbe.com.et:100`) |
+| Full legacy receipt URL | Legacy PDF service (suffix extracted from the URL) |
+| New-platform token or `mbreciept.cbe.com.et` URL | Modern JSON API (`mb.cbe.com.et`) |
 
-- 🔍 **Transaction Verification**: Verify transaction details against official CBE records
-- 📄 **PDF Parsing**: Automatically parse CBE receipt PDFs to extract transaction information
-- 🛡️ **Error Handling**: Comprehensive error handling with detailed mismatch information
-- ⚡ **Configurable**: Customizable timeouts and verification settings
-- 📦 **Library Ready**: Designed as a reusable Go library with clean API
-
-## Installation
+## Install
 
 ```bash
-go get github.com/Zahir-Seid/cbe-verifier
+go get github.com/Zahir-Seid/cbe-verifier/v2
 ```
 
-## Quick Start
+> **Coming from v1?** The module path now carries the `/v2` suffix and the
+> API has been redesigned — see [Migrating from v1](#migrating-from-v1).
+
+## Quick start
 
 ```go
 package main
 
 import (
-    "fmt"
-    "log"
-    "github.com/Zahir-Seid/cbe-verifier/cbeverifier"
+	"context"
+	"fmt"
+
+	cbeverifier "github.com/Zahir-Seid/cbe-verifier/v2/pkg/cbeverifier"
 )
 
 func main() {
-    // Create transaction data to verify
-    transaction := cbeverifier.Transaction{
-        ID:     "xxxxx",
-        Suffix: "xxxxx",
-        Amount: xxx.xx,
-    }
+	result, err := cbeverifier.Verify(context.Background(), cbeverifier.Transaction{
+		Reference: "FT25062PP5ZB",
+		Suffix:    "12345678", // digits after 1000 in the payer's CBE account
+		Amount:    1500.00,
+	})
+	if err != nil {
+		// Caller misuse or infrastructure failure - match with errors.Is.
+		panic(err)
+	}
 
-    // Verify against official records
-    result, err := cbeverifier.Verify(transaction, cbeverifier.DefaultOptions())
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    if result.IsValid {
-        fmt.Println("Transaction verified successfully!")
-    } else {
-        fmt.Printf("Verification failed: %s\n", result.Error)
-    }
+	switch result.Status {
+	case cbeverifier.StatusValid:
+		fmt.Printf("verified via %s: paid by %s\n", result.Backend, result.Details.Payer)
+	case cbeverifier.StatusMismatch:
+		for _, m := range result.Mismatches {
+			fmt.Printf("%s differs: claimed %v, official %v\n", m.Field, m.Provided, m.Official)
+		}
+	case cbeverifier.StatusNotFound:
+		fmt.Println("CBE has no receipt for that reference")
+	}
 }
 ```
 
-## API Reference
+Verifying a new-platform receipt is the same call — paste whatever the
+payer shared:
 
-### Types
+```go
+result, err := cbeverifier.Verify(ctx, cbeverifier.Transaction{
+	Reference: "https://mbreciept.cbe.com.et/AbCdEf123456789", // token auto-extracted
+	Amount:    250.00,
+})
+```
 
-#### Transaction
-Represents a CBE transaction to be verified.
+## API
+
+### `Verify(ctx context.Context, tx Transaction, opts ...Option) (*Result, error)`
+
+The single entry point.
+
+**Error model.** `err != nil` means caller misuse (empty/unknown reference,
+missing suffix, non-positive amount) or an infrastructure failure (network,
+CBE outage after retries, unreadable receipt). Match against the sentinel
+errors with `errors.Is`:
+
+`ErrEmptyReference`, `ErrUnsupportedReference`, `ErrMissingSuffix`,
+`ErrInvalidAmount`, `ErrNetwork`, `ErrUnexpectedResponse`,
+`ErrReceiptParse`, `ErrServiceUnavailable`.
+
+Business outcomes are data on `Result`, never errors:
+
+| `Result.Status` | Meaning |
+| --- | --- |
+| `StatusValid` | Receipt fetched; every compared field matches. |
+| `StatusMismatch` | Receipt fetched; at least one field differs (`Result.Mismatches`). |
+| `StatusNotFound` | CBE returned 404 for that reference/token. |
+
+**Comparison semantics.** The supplied `Amount` is always compared against
+the official amount (both rounded to two decimals). For legacy receipts the
+official FT-reference is additionally compared against the one embedded in
+your input. New-platform tokens are opaque and are *not* the official
+reference, so only the amount is compared there.
+
+### `Transaction`
 
 ```go
 type Transaction struct {
-    ID     string  `json:"id"`     // Transaction reference number (e.g., "xxxxx")
-    Suffix string  `json:"suffix"` // Transaction suffix (e.g., "xxxxx")
-    Amount float64 `json:"amount"` // Transaction amount in ETB
+	Reference string  // raw input: bare ref, pasted URL, or token
+	Suffix    string  // required for bare legacy references only
+	Amount    float64 // expected amount in ETB (> 0)
 }
 ```
 
-#### Options
-Configures the verification process.
+### `Result`
 
 ```go
-type Options struct {
-    IncludeDetails bool   `json:"include_details"` // Return full transaction details
-    Timeout        int    `json:"timeout"`         // HTTP timeout in seconds (default: 120)
+type Result struct {
+	Status     Status              // valid | mismatch | not_found
+	Valid      bool                // convenience: Status == StatusValid
+	Backend    Backend             // legacy_pdf | json_api
+	Details    *TransactionDetails // official record (valid & mismatch)
+	Mismatches []Mismatch          // [{field, provided, official}]
 }
 ```
 
-#### VerificationResult
-Result of a transaction verification.
+`TransactionDetails` normalizes both backends: payer/receiver names,
+masked account numbers, amount, date (parsed to UTC where recognized, plus
+`DateRaw` as printed), official reference, and reason.
 
-```go
-type VerificationResult struct {
-    IsValid    bool                    `json:"is_valid"`    // Whether verification succeeded
-    Details    *TransactionDetails     `json:"details"`     // Official transaction details
-    Error      string                  `json:"error"`       // Error message if failed
-    Mismatches map[string]interface{}  `json:"mismatches"`  // Field mismatches if failed
-}
+### Options
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `WithTimeout(d)` | `30s` | Per-request HTTP timeout |
+| `WithRetry(attempts, delay)` | `4`, `1.8s` | JSON-backend retry policy for transport errors and HTTP 429/502/503/504 (404 never retries) |
+| `WithAppCredentials(id, version)` | CBE's public app ids | Overrides the `x-app-id` / `x-app-version` headers |
+| `WithInsecureSkipVerify()` | off | **Dangerous**: disables TLS verification. Escape hatch only — do not enable in production |
+
+## CLI
+
+```bash
+go run ./example --reference FT25062PP5ZB --suffix 12345678 --amount 1500
+go run ./example --reference "https://mbreciept.cbe.com.et/AbCdEf123456789" --amount 250
 ```
 
-#### TransactionDetails
-Parsed transaction information from the official receipt.
-
-```go
-type TransactionDetails struct {
-    Payer           string  `json:"payer"`            // Payer name
-    PayerAccount    string  `json:"payer_account"`    // Payer account number
-    Receiver        string  `json:"receiver"`         // Receiver name
-    ReceiverAccount string  `json:"receiver_account"` // Receiver account number
-    Amount          float64 `json:"amount"`           // Transaction amount
-    Date            string  `json:"date"`             // Payment date
-    TransactionID   string  `json:"transaction_id"`   // Reference number
-    Reason          string  `json:"reason"`           // Payment reason
-}
-```
-
-### Functions
-
-#### Verify
-Main function to verify a transaction against official CBE records.
-
-```go
-func Verify(transaction Transaction, opts Options) (*VerificationResult, error)
-```
-
-**Parameters:**
-- `transaction`: Transaction data to verify
-- `opts`: Verification options
-
-**Returns:**
-- `*VerificationResult`: Verification result
-- `error`: Error if verification process failed
-
-#### DefaultOptions
-Returns default verification options.
-
-```go
-func DefaultOptions() Options
-```
-
-#### ParseCBEReceipt
-Parse a CBE receipt PDF and extract transaction information.
-
-```go
-func ParseCBEReceipt(pdfBytes []byte) VerifyResult
-```
-
-**Parameters:**
-- `pdfBytes`: PDF file content as bytes
-
-**Returns:**
-- `VerifyResult`: Parsing result with extracted details or error information
-
-## Usage Examples
-
-### Basic Verification
-
-```go
-transaction := cbeverifier.Transaction{
-    ID:     "xxxxx",
-    Suffix: "xxxxx",
-    Amount: xxx.xx,
-}
-
-result, err := cbeverifier.Verify(transaction, cbeverifier.DefaultOptions())
-if err != nil {
-    log.Fatal(err)
-}
-
-if result.IsValid {
-    fmt.Println("Transaction verified successfully!")
-} else {
-    fmt.Printf("Verification failed: %s\n", result.Error)
-}
-```
-
-### Verification with Full Details
-
-```go
-opts := cbeverifier.Options{
-    IncludeDetails: true,
-    Timeout:        120,
-}
-
-result, err := cbeverifier.Verify(transaction, opts)
-if err != nil {
-    log.Fatal(err)
-}
-
-if result.IsValid && result.Details != nil {
-    fmt.Printf("Amount: %.2f ETB\n", result.Details.Amount)
-    fmt.Printf("Payer: %s\n", result.Details.Payer)
-    fmt.Printf("Receiver: %s\n", result.Details.Receiver)
-    fmt.Printf("Date: %s\n", result.Details.Date)
-}
-```
-
-### Error Handling
-
-```go
-result, err := cbeverifier.Verify(transaction, cbeverifier.DefaultOptions())
-if err != nil {
-    log.Printf("Verification process failed: %v", err)
-    return
-}
-
-if !result.IsValid {
-    fmt.Printf("Verification failed: %s\n", result.Error)
-    
-    // Check for specific mismatches
-    if result.Mismatches != nil {
-        for field, mismatch := range result.Mismatches {
-            if mismatchMap, ok := mismatch.(map[string]interface{}); ok {
-                fmt.Printf("Field %s: provided=%v, official=%v\n",
-                    field, mismatchMap["provided"], mismatchMap["official"])
-            }
-        }
-    }
-}
-```
-
-### PDF Parsing Only
-
-```go
-// Read PDF file
-pdfBytes, err := os.ReadFile("receipt.pdf")
-if err != nil {
-    log.Fatal(err)
-}
-
-// Parse PDF
-result := cbeverifier.ParseCBEReceipt(pdfBytes)
-if result.Success {
-    fmt.Printf("Amount: %.2f ETB\n", result.Details["amount"])
-    fmt.Printf("Payer: %s\n", result.Details["payer"])
-} else {
-    fmt.Printf("Parse error: %v\n", result.Details["error"])
-}
-```
-
-## Error Handling
-
-The library provides comprehensive error handling with specific error types:
-
-- `ErrInvalidTransactionID`: Invalid transaction ID
-- `ErrInvalidSuffix`: Invalid suffix
-- `ErrInvalidAmount`: Invalid amount
-- `ErrNetworkError`: Network communication error
-- `ErrInvalidPDFResponse`: Invalid PDF response from CBE
-- `ErrPDFReadError`: PDF content read error
-- `ErrReceiptParseError`: PDF parsing error
-- `ErrVerificationFailed`: Transaction verification failed
-
-## Configuration
-
-### Timeout Settings
-
-```go
-opts := cbeverifier.Options{
-    Timeout: 60, // 60 seconds timeout
-}
-```
-## Dependencies
-
-- `github.com/dslipak/pdf`: PDF parsing library
+Prints the JSON `Result`; exits `0` when valid, `1` when not verified, `2`
+on usage/infrastructure errors.
 
 ## Requirements
 
-- Go 1.24 or later
-- Internet connection for fetching CBE receipts
+- Go 1.24+
+- Network access to CBE endpoints (verification is inherently online)
 
-## Security Notes
+## Security notes
 
-- The library uses `InsecureSkipVerify: true` for TLS connections to CBE servers as required by their certificate configuration
-- No sensitive data is logged or stored unless explicitly configured
+- TLS certificate verification is **always on** unless you explicitly pass
+  `WithInsecureSkipVerify()` — which exists only for broken corporate TLS
+  inspection setups and should never ship.
+- Response bodies are size-capped (10 MiB) and every request honours your
+  `context.Context`.
+- Nothing is logged by the library; what you log is what leaks.
+
+## Dependencies
+
+- [`github.com/dslipak/pdf`](https://github.com/dslipak/pdf) — legacy
+  receipt text extraction (see CONTRIBUTING for the maintenance caveat)
+
+## Migrating from v1
+
+| v1 | v2 |
+| --- | --- |
+| `module github.com/Zahir-Seid/cbe-verifier` | `github.com/Zahir-Seid/cbe-verifier/v2` |
+| `cbeverifier.Verify(tx, opts)` | `cbeverifier.Verify(ctx, tx, opts...)` |
+| `Options{IncludeDetails, Timeout}` struct | Functional options (`WithTimeout`, …); details are now always populated |
+| Errors flattened into `result.Error` strings | Real wrapped errors; `errors.Is` works |
+| Parser returns `map[string]interface{}` | Single typed `TransactionDetails` everywhere |
+| `Mismatches map[string]interface{}` | Typed `[]Mismatch{Field, Provided, Official}` |
+| New JSON API unsupported | Supported, with retries and token/URL routing |
+| TLS verification disabled unconditionally | Strict by default, opt-out explicit |
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+See [CONTRIBUTING.md](CONTRIBUTING.md) — branch model, release process,
+and maintenance playbooks.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT — see [LICENSE](LICENSE).
 
 ## Disclaimer
 
-This library is not officially affiliated with the Commercial Bank of Ethiopia. Use at your own risk and ensure compliance with CBE's terms of service. 
+This library is an independent community tool and is not affiliated with
+or endorsed by the Commercial Bank of Ethiopia. Verify high-value payments
+through official channels; use at your own risk and ensure compliance with
+CBE's terms of service.
