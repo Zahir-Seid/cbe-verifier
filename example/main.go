@@ -36,9 +36,12 @@ func run(args []string, stdout, stderr *os.File) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+
 	if err := validateFlags(reference, amount); err != nil {
-		fmt.Fprintln(stderr, err) //nolint:errcheck // best-effort diagnostics to stderr
+		fmt.Fprintln(stderr, err) //nolint:errcheck,wsl_v5 // best-effort diagnostics to stderr
+
 		fs.Usage()
+
 		return 2
 	}
 
@@ -50,20 +53,26 @@ func run(args []string, stdout, stderr *os.File) int {
 		Suffix:    *suffix,
 		Amount:    *amount,
 	}, cbeverifier.WithTimeout(*timeout))
+
 	if err != nil {
 		fmt.Fprintf(stderr, "cbeverify: %v\n", err) //nolint:errcheck // best-effort diagnostics to stderr
+
 		return 2
 	}
 
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
+
 	if err := enc.Encode(result); err != nil {
 		fmt.Fprintf(stderr, "cbeverify: encode output: %v\n", err) //nolint:errcheck // best-effort diagnostics to stderr
+
 		return 2
 	}
+
 	if !result.Valid {
 		return 1
 	}
+
 	return 0
 }
 
@@ -71,8 +80,10 @@ func validateFlags(reference *string, amount *float64) error {
 	if *reference == "" {
 		return errors.New("cbeverify: -reference is required")
 	}
+
 	if *amount <= 0 {
 		return errors.New("cbeverify: -amount must be greater than zero")
 	}
+
 	return nil
 }

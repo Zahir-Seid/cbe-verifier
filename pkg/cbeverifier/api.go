@@ -45,6 +45,7 @@ func fetchTransactionJSON(ctx context.Context, s *settings, token string) (*Tran
 	client := s.client()
 
 	var lastErr error
+
 	for attempt := range s.retryAttempts {
 		if attempt > 0 {
 			if err := sleepContext(ctx, s.retryDelay); err != nil {

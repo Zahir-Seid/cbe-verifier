@@ -123,9 +123,11 @@ func WithAppCredentials(appID, appVersion string) Option {
 // httpClient builds the HTTP client used for a call, applying the timeout
 // and TLS posture from the resolved settings.
 func (s *settings) client() *http.Client {
-	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12} //nolint:gosec // minimum TLS 1.2 is intentional; InsecureSkipVerify stays false unless explicitly opted into
+	// Minimum TLS 1.2 is intentional; InsecureSkipVerify stays false
+	// unless explicitly opted into via WithInsecureSkipVerify.
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 	if s.insecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = true //nolint:gosec // explicit caller opt-in via WithInsecureSkipVerify
+		tlsConfig.InsecureSkipVerify = true
 	}
 	return &http.Client{
 		Timeout: s.timeout,
