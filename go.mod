@@ -1,4 +1,4 @@
-module github.com/Zahir-Seid/cbe-verifier
+module github.com/Zahir-Seid/cbe-verifier/v2
 
 go 1.24
 
