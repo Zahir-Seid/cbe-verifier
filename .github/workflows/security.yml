@@ -28,5 +28,5 @@ jobs:
         with:
           go-version: 'stable'
       - run: go install github.com/securego/gosec/v2/cmd/gosec@latest
-      # G304/G307 style findings are reviewed; the library only reads CBE responses.
-      - run: gosec ./...
+      # .agents holds the vendored Go skills (reference examples), not product code.
+      - run: gosec -exclude-dir .agents ./...

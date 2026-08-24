@@ -9,6 +9,16 @@ import (
 	"time"
 )
 
+// Shared fixture constants keep the receipt/reference shapes in one place.
+const (
+	testLegacyReference = "FT25062PP5ZB"
+	testLegacySuffix    = "12345678"
+	testNewToken        = testTokenValue
+)
+
+// testTokenValue keeps the token literal out of the cycle-prone group.
+const testTokenValue = "AbCdEf123456789"
+
 func TestVerify_ValidationErrors(t *testing.T) {
 	t.Parallel()
 
@@ -18,8 +28,8 @@ func TestVerify_ValidationErrors(t *testing.T) {
 		want error
 	}{
 		{"empty reference", Transaction{Reference: "  ", Amount: 10}, ErrEmptyReference},
-		{"zero amount", Transaction{Reference: "FT25062PP5ZB", Suffix: "12345678"}, ErrInvalidAmount},
-		{"negative amount", Transaction{Reference: "FT25062PP5ZB", Amount: -5}, ErrInvalidAmount},
+		{"zero amount", Transaction{Reference: testLegacyReference, Suffix: testLegacySuffix}, ErrInvalidAmount},
+		{"negative amount", Transaction{Reference: testLegacyReference, Amount: -5}, ErrInvalidAmount},
 		{"unrecognized format", Transaction{Reference: "not a ref", Amount: 10}, ErrUnsupportedReference},
 	}
 
@@ -41,7 +51,7 @@ func TestVerify_ValidationErrors(t *testing.T) {
 func TestVerify_LegacyWithoutSuffixIsACallerError(t *testing.T) {
 	t.Parallel()
 
-	_, err := Verify(context.Background(), Transaction{Reference: "FT25062PP5ZB", Amount: 10})
+	_, err := Verify(context.Background(), Transaction{Reference: testLegacyReference, Amount: 10})
 	if !errors.Is(err, ErrMissingSuffix) {
 		t.Fatalf("err = %v, want wrapped ErrMissingSuffix", err)
 	}
@@ -62,8 +72,8 @@ func TestVerify_LegacyMatchingReceiptIsValid(t *testing.T) {
 	defer server.Close()
 
 	result, err := Verify(context.Background(), Transaction{
-		Reference: "FT25062PP5ZB",
-		Suffix:    "12345678",
+		Reference: testLegacyReference,
+		Suffix:    testLegacySuffix,
 		Amount:    1234.50,
 	}, withBaseURL(server.URL, ""))
 	if err != nil {
@@ -76,7 +86,7 @@ func TestVerify_LegacyMatchingReceiptIsValid(t *testing.T) {
 	if result.Backend != BackendLegacyPDF {
 		t.Errorf("Backend = %s, want legacy_pdf", result.Backend)
 	}
-	if result.Details == nil || result.Details.Reference != "FT25062PP5ZB" {
+	if result.Details == nil || result.Details.Reference != testLegacyReference {
 		t.Errorf("Details = %+v, want populated official record", result.Details)
 	}
 	if len(result.Mismatches) != 0 {
@@ -91,8 +101,8 @@ func TestVerify_LegacyAmountMismatch(t *testing.T) {
 	defer server.Close()
 
 	result, err := Verify(context.Background(), Transaction{
-		Reference: "FT25062PP5ZB",
-		Suffix:    "12345678",
+		Reference: testLegacyReference,
+		Suffix:    testLegacySuffix,
 		Amount:    999.99,
 	}, withBaseURL(server.URL, ""))
 	if err != nil {
@@ -118,7 +128,7 @@ func TestVerify_LegacyReferenceMismatch(t *testing.T) {
 
 	result, err := Verify(context.Background(), Transaction{
 		Reference: "FT99999AAAAA", // receipt carries FT25062PP5ZB
-		Suffix:    "12345678",
+		Suffix:    testLegacySuffix,
 		Amount:    1234.50,
 	}, withBaseURL(server.URL, ""))
 	if err != nil {
@@ -183,7 +193,7 @@ func TestVerify_JSONAPITokenFlow(t *testing.T) {
 	defer server.Close()
 
 	result, err := Verify(context.Background(), Transaction{
-		Reference: "AbCdEf123456789",
+		Reference: testNewToken,
 		Amount:    500.00,
 	}, withBaseURL("", server.URL))
 	if err != nil {
@@ -232,8 +242,8 @@ func TestVerify_CancelledContextIsInfrastructureError(t *testing.T) {
 	defer server.Close()
 
 	_, err := Verify(ctx, Transaction{
-		Reference: "FT25062PP5ZB",
-		Suffix:    "12345678",
+		Reference: testLegacyReference,
+		Suffix:    testLegacySuffix,
 		Amount:    1234.50,
 	}, withBaseURL(server.URL, ""))
 	if !errors.Is(err, ErrNetwork) && !errors.Is(err, context.Canceled) {

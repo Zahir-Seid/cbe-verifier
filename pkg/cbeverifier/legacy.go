@@ -16,7 +16,7 @@ func fetchLegacyReceipt(ctx context.Context, s *settings, reference, suffix stri
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNetwork, err)
+		return nil, fmt.Errorf("%w: %w", ErrNetwork, err)
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/pdf")
@@ -24,7 +24,7 @@ func fetchLegacyReceipt(ctx context.Context, s *settings, reference, suffix stri
 
 	resp, err := s.client().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrNetwork, err)
+		return nil, fmt.Errorf("%w: %w", ErrNetwork, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -35,7 +35,7 @@ func fetchLegacyReceipt(ctx context.Context, s *settings, reference, suffix stri
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("%w: reading receipt: %v", ErrNetwork, err)
+		return nil, fmt.Errorf("%w: reading receipt: %w", ErrNetwork, err)
 	}
 	if len(body) > maxResponseBodyBytes {
 		return nil, fmt.Errorf("%w: receipt exceeds %d bytes", ErrUnexpectedResponse, maxResponseBodyBytes)

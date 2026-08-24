@@ -31,7 +31,7 @@ func TestFetchTransactionJSON_MapsReceipt(t *testing.T) {
 	defer server.Close()
 
 	details, err := fetchTransactionJSON(context.Background(),
-		resolveSettings([]Option{withBaseURL("", server.URL)}), "AbCdEf123456789")
+		resolveSettings([]Option{withBaseURL("", server.URL)}), testNewToken)
 	if err != nil {
 		t.Fatalf("fetchTransactionJSON: %v", err)
 	}

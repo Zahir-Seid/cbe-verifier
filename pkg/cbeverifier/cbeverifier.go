@@ -117,9 +117,12 @@ func Verify(ctx context.Context, tx Transaction, opts ...Option) (*Result, error
 		// not mismatch against their own formatting.
 		return compare(classified.ID, tx.Amount, details, BackendLegacyPDF), nil
 
-	default:
+	case RefUnknown:
 		return nil, fmt.Errorf("validate transaction: %w (%q)", ErrUnsupportedReference, reference)
 	}
+	// Defensive: unreachable while RefKind has exactly four values; guards
+	// future enum additions from silently returning a nil result.
+	return nil, fmt.Errorf("validate transaction: %w (%q)", ErrUnsupportedReference, reference)
 }
 
 // compare evaluates the fetched details against what the caller claims. An

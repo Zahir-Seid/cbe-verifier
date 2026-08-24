@@ -80,7 +80,7 @@ func TestParseReceipt_ValidFullReceipt(t *testing.T) {
 		receiver:        "Almaz Tesfaye Girma",
 		receiverAccount: "1001****4321",
 		amount:          1234.50,
-		reference:       "FT25062PP5ZB",
+		reference:       testLegacyReference,
 		reason:          "House Rent Payment",
 		dateRaw:         "6/24/2025, 3:41:07 PM",
 	})

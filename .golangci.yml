@@ -107,6 +107,15 @@ linters:
       - third_party$
       - testutils$
       - examples$
+      # Vendored Go skills: reference examples, not product code.
+      - ^\.agents/
+    rules:
+      # Tests favour literal clarity over DRY: table rows repeat fixtures
+      # and assertions by design.
+      - path: _test\.go
+        linters:
+          - dupl
+          - goconst
 
   settings:
     dupl:

@@ -48,7 +48,7 @@ func fetchTransactionJSON(ctx context.Context, s *settings, token string) (*Tran
 	for attempt := range s.retryAttempts {
 		if attempt > 0 {
 			if err := sleepContext(ctx, s.retryDelay); err != nil {
-				return nil, fmt.Errorf("%w: %v", ErrNetwork, err)
+				return nil, fmt.Errorf("%w: %w", ErrNetwork, err)
 			}
 		}
 
@@ -62,7 +62,7 @@ func fetchTransactionJSON(ctx context.Context, s *settings, token string) (*Tran
 		lastErr = err
 	}
 
-	return nil, fmt.Errorf("%w: %v", ErrServiceUnavailable, lastErr)
+	return nil, fmt.Errorf("%w: %w", ErrServiceUnavailable, lastErr)
 }
 
 // fetchTransactionOnce performs a single request. The retryable return
@@ -71,7 +71,7 @@ func fetchTransactionJSON(ctx context.Context, s *settings, token string) (*Tran
 func fetchTransactionOnce(ctx context.Context, client *http.Client, s *settings, url string) (details *TransactionDetails, retryable bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, false, fmt.Errorf("%w: %v", ErrNetwork, err)
+		return nil, false, fmt.Errorf("%w: %w", ErrNetwork, err)
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/json, text/plain, */*")
@@ -84,7 +84,7 @@ func fetchTransactionOnce(ctx context.Context, client *http.Client, s *settings,
 	if err != nil {
 		// Transport-level failures (DNS, TLS, timeout, cancellation) are
 		// considered transient, mirroring the reference implementation.
-		return nil, true, fmt.Errorf("%w: %v", ErrNetwork, err)
+		return nil, true, fmt.Errorf("%w: %w", ErrNetwork, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -92,7 +92,7 @@ func fetchTransactionOnce(ctx context.Context, client *http.Client, s *settings,
 	case resp.StatusCode == http.StatusOK:
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes+1))
 		if err != nil {
-			return nil, false, fmt.Errorf("%w: reading response: %v", ErrUnexpectedResponse, err)
+			return nil, false, fmt.Errorf("%w: reading response: %w", ErrUnexpectedResponse, err)
 		}
 		if len(body) > maxResponseBodyBytes {
 			return nil, false, fmt.Errorf("%w: response exceeds %d bytes", ErrUnexpectedResponse, maxResponseBodyBytes)
@@ -100,7 +100,7 @@ func fetchTransactionOnce(ctx context.Context, client *http.Client, s *settings,
 
 		var payload cbeTransactionResponse
 		if err := json.Unmarshal(body, &payload); err != nil {
-			return nil, false, fmt.Errorf("%w: decoding JSON: %v", ErrUnexpectedResponse, err)
+			return nil, false, fmt.Errorf("%w: decoding JSON: %w", ErrUnexpectedResponse, err)
 		}
 		return mapJSONReceipt(payload), false, nil
 

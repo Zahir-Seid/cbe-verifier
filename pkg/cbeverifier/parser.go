@@ -52,7 +52,7 @@ func parseReceipt(pdfBytes []byte) (*TransactionDetails, error) {
 
 	doc, err := pdf.NewReader(bytes.NewReader(pdfBytes), int64(len(pdfBytes)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: opening document: %v", ErrReceiptParse, err)
+		return nil, fmt.Errorf("%w: opening document: %w", ErrReceiptParse, err)
 	}
 
 	text := normalizeDocumentText(extractAllText(doc))

@@ -37,7 +37,7 @@ func run(args []string, stdout, stderr *os.File) int {
 		return 2
 	}
 	if err := validateFlags(reference, amount); err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, err) //nolint:errcheck // best-effort diagnostics to stderr
 		fs.Usage()
 		return 2
 	}
@@ -51,14 +51,14 @@ func run(args []string, stdout, stderr *os.File) int {
 		Amount:    *amount,
 	}, cbeverifier.WithTimeout(*timeout))
 	if err != nil {
-		fmt.Fprintf(stderr, "cbeverify: %v\n", err)
+		fmt.Fprintf(stderr, "cbeverify: %v\n", err) //nolint:errcheck // best-effort diagnostics to stderr
 		return 2
 	}
 
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(result); err != nil {
-		fmt.Fprintf(stderr, "cbeverify: encode output: %v\n", err)
+		fmt.Fprintf(stderr, "cbeverify: encode output: %v\n", err) //nolint:errcheck // best-effort diagnostics to stderr
 		return 2
 	}
 	if !result.Valid {
