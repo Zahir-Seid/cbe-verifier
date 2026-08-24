@@ -63,12 +63,15 @@ func TestClassifyReference(t *testing.T) {
 			if got.Kind != tt.want {
 				t.Fatalf("Kind = %v, want %v", got.Kind, tt.want)
 			}
+
 			if got.ID != tt.wantID {
 				t.Errorf("ID = %q, want %q", got.ID, tt.wantID)
 			}
+
 			if got.Suffix != tt.wantSuf {
 				t.Errorf("Suffix = %q, want %q", got.Suffix, tt.wantSuf)
 			}
+
 			if got.Token != tt.wantTok {
 				t.Errorf("Token = %q, want %q", got.Token, tt.wantTok)
 			}
@@ -96,6 +99,7 @@ func FuzzClassifyReference(f *testing.F) {
 			if len(got.Suffix) != 8 {
 				t.Errorf("URL suffix %q has length %d, want 8", got.Suffix, len(got.Suffix))
 			}
+
 			if got.Suffix == "" || got.ID == "" {
 				t.Error("legacy URL classification missing ID or suffix")
 			}

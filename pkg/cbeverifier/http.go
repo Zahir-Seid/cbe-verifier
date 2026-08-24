@@ -50,6 +50,7 @@ func withBaseURL(legacy, api string) Option {
 		if legacy != "" {
 			s.legacyBaseURL = legacy
 		}
+
 		if api != "" {
 			s.apiBaseURL = api
 		}
@@ -69,15 +70,19 @@ func resolveSettings(opts []Option) *settings {
 	for _, opt := range opts {
 		opt(s)
 	}
+
 	if s.timeout <= 0 {
 		s.timeout = DefaultTimeout
 	}
+
 	if s.retryAttempts < 1 {
 		s.retryAttempts = 1
 	}
+
 	if s.retryDelay < 0 {
 		s.retryDelay = 0
 	}
+
 	return s
 }
 
@@ -129,6 +134,7 @@ func (s *settings) client() *http.Client {
 	if s.insecureSkipVerify {
 		tlsConfig.InsecureSkipVerify = true
 	}
+
 	return &http.Client{
 		Timeout: s.timeout,
 		Transport: &http.Transport{

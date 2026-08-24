@@ -11,10 +11,12 @@ func mediaTypeIs(contentType, want string) bool {
 	if strings.TrimSpace(contentType) == "" {
 		return false
 	}
+
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		// Fall back to a tolerant comparison for non-conforming headers.
 		return strings.EqualFold(strings.TrimSpace(strings.Split(contentType, ";")[0]), want)
 	}
+
 	return strings.EqualFold(mediaType, want)
 }

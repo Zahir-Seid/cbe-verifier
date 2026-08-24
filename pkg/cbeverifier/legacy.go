@@ -18,6 +18,7 @@ func fetchLegacyReceipt(ctx context.Context, s *settings, reference, suffix stri
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrNetwork, err)
 	}
+
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/pdf")
 	req.Header.Set("Accept-Encoding", "identity")
@@ -37,9 +38,11 @@ func fetchLegacyReceipt(ctx context.Context, s *settings, reference, suffix stri
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading receipt: %w", ErrNetwork, err)
 	}
+
 	if len(body) > maxResponseBodyBytes {
 		return nil, fmt.Errorf("%w: receipt exceeds %d bytes", ErrUnexpectedResponse, maxResponseBodyBytes)
 	}
+
 	return body, nil
 }
 

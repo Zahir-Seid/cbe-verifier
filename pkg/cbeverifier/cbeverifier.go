@@ -77,6 +77,7 @@ func Verify(ctx context.Context, tx Transaction, opts ...Option) (*Result, error
 	if reference == "" {
 		return nil, fmt.Errorf("validate transaction: %w", ErrEmptyReference)
 	}
+
 	if tx.Amount <= 0 {
 		return nil, fmt.Errorf("validate transaction: %w", ErrInvalidAmount)
 	}
@@ -90,6 +91,7 @@ func Verify(ctx context.Context, tx Transaction, opts ...Option) (*Result, error
 			if errors.Is(err, errTokenNotFound) {
 				return &Result{Status: StatusNotFound, Backend: BackendJSONAPI}, nil
 			}
+
 			return nil, fmt.Errorf("fetch receipt: %w", err)
 		}
 		// Tokens are opaque and are not the official reference; only the
@@ -101,6 +103,7 @@ func Verify(ctx context.Context, tx Transaction, opts ...Option) (*Result, error
 		if suffix == "" {
 			suffix = classified.Suffix
 		}
+
 		if suffix == "" {
 			return nil, fmt.Errorf("validate transaction: %w", ErrMissingSuffix)
 		}
@@ -109,6 +112,7 @@ func Verify(ctx context.Context, tx Transaction, opts ...Option) (*Result, error
 		if err != nil {
 			return nil, fmt.Errorf("fetch receipt: %w", err)
 		}
+
 		details, err := parseReceipt(pdfBytes)
 		if err != nil {
 			return nil, fmt.Errorf("parse receipt: %w", err)
@@ -137,6 +141,7 @@ func compare(claimedReference string, claimedAmount float64, details *Transactio
 			Official: details.Reference,
 		})
 	}
+
 	if round2(claimedAmount) != round2(details.Amount) {
 		mismatches = append(mismatches, Mismatch{
 			Field:    "amount",
@@ -149,6 +154,7 @@ func compare(claimedReference string, claimedAmount float64, details *Transactio
 	if len(mismatches) > 0 {
 		status = StatusMismatch
 	}
+
 	return &Result{
 		Status:     status,
 		Valid:      status == StatusValid,

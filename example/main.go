@@ -38,7 +38,7 @@ func run(args []string, stdout, stderr *os.File) int {
 	}
 
 	if err := validateFlags(reference, amount); err != nil {
-		fmt.Fprintln(stderr, err) //nolint:errcheck,wsl_v5 // best-effort diagnostics to stderr
+		fmt.Fprintln(stderr, err) //nolint:errcheck // best-effort diagnostics to stderr
 
 		fs.Usage()
 
@@ -53,7 +53,6 @@ func run(args []string, stdout, stderr *os.File) int {
 		Suffix:    *suffix,
 		Amount:    *amount,
 	}, cbeverifier.WithTimeout(*timeout))
-
 	if err != nil {
 		fmt.Fprintf(stderr, "cbeverify: %v\n", err) //nolint:errcheck // best-effort diagnostics to stderr
 

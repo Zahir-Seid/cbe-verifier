@@ -45,6 +45,7 @@ func TestFetchTransactionJSON_MapsReceipt(t *testing.T) {
 		reference:       "FT25063QQ9XC",
 		reason:          "House Rent June 2025",
 	})
+
 	wantDate := time.Date(2025, 6, 24, 15, 41, 7, 0, time.UTC)
 	if !details.Date.Equal(wantDate) {
 		t.Errorf("Date = %v, want %v", details.Date, wantDate)
@@ -55,12 +56,14 @@ func TestFetchTransactionJSON_RetriesTransientStatuses(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
 		if attempts <= 2 {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
+
 		_, _ = w.Write([]byte(`{"id":"FT1","amountCredited":"10.00"}`))
 	}))
 	defer server.Close()
@@ -69,6 +72,7 @@ func TestFetchTransactionJSON_RetriesTransientStatuses(t *testing.T) {
 	if _, err := fetchTransactionJSON(context.Background(), resolveSettings(opts), "token-token-tok"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if attempts != 3 {
 		t.Errorf("attempts = %d, want 3 (two retries then success)", attempts)
 	}
@@ -82,17 +86,21 @@ func TestFetchTransactionJSON_RetryExhaustionWrapsSentinel(t *testing.T) {
 			t.Parallel()
 
 			var attempts int
+
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				attempts++
+
 				w.WriteHeader(status)
 			}))
 			defer server.Close()
 
 			opts := []Option{withBaseURL("", server.URL), WithRetry(3, time.Millisecond)}
+
 			_, err := fetchTransactionJSON(context.Background(), resolveSettings(opts), "token-token-tok")
 			if !errors.Is(err, ErrServiceUnavailable) {
 				t.Fatalf("err = %v, want wrapped ErrServiceUnavailable", err)
 			}
+
 			if attempts != 3 {
 				t.Errorf("attempts = %d, want 3", attempts)
 			}
@@ -104,17 +112,21 @@ func TestFetchTransactionJSON_NotFoundIsImmediate(t *testing.T) {
 	t.Parallel()
 
 	var attempts int
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
+
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
 
 	opts := []Option{withBaseURL("", server.URL), WithRetry(4, time.Millisecond)}
+
 	_, err := fetchTransactionJSON(context.Background(), resolveSettings(opts), "missing-token-00")
 	if !errors.Is(err, errTokenNotFound) {
 		t.Fatalf("err = %v, want errTokenNotFound", err)
 	}
+
 	if attempts != 1 {
 		t.Errorf("attempts = %d, want 1 (404 must not retry)", attempts)
 	}
@@ -124,17 +136,21 @@ func TestFetchTransactionJSON_NonRetryableStatusFailsFast(t *testing.T) {
 	t.Parallel()
 
 	var attempts int
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
+
 		w.WriteHeader(http.StatusBadRequest)
 	}))
 	defer server.Close()
 
 	opts := []Option{withBaseURL("", server.URL), WithRetry(4, time.Millisecond)}
+
 	_, err := fetchTransactionJSON(context.Background(), resolveSettings(opts), "token-token-tok")
 	if !errors.Is(err, ErrUnexpectedResponse) {
 		t.Fatalf("err = %v, want wrapped ErrUnexpectedResponse", err)
 	}
+
 	if attempts != 1 {
 		t.Errorf("attempts = %d, want 1", attempts)
 	}
@@ -149,6 +165,7 @@ func TestFetchTransactionJSON_MalformedJSON(t *testing.T) {
 	defer server.Close()
 
 	opts := []Option{withBaseURL("", server.URL)}
+
 	_, err := fetchTransactionJSON(context.Background(), resolveSettings(opts), "token-token-tok")
 	if !errors.Is(err, ErrUnexpectedResponse) {
 		t.Fatalf("err = %v, want wrapped ErrUnexpectedResponse", err)
@@ -159,19 +176,25 @@ func TestFetchTransactionJSON_SendsExpectedHeaders(t *testing.T) {
 	t.Parallel()
 
 	var got http.Header
+
 	done := make(chan struct{})
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = r.Header.Clone()
+
 		close(done)
+
 		_, _ = w.Write([]byte(`{}`))
 	}))
 	defer server.Close()
 
 	opts := []Option{withBaseURL("", server.URL), WithAppCredentials("my-app-id", "my-app-version")}
+
 	_, err := fetchTransactionJSON(context.Background(), resolveSettings(opts), "token-token-tok")
 	if err != nil {
 		t.Fatalf("fetchTransactionJSON: %v", err)
 	}
+
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
@@ -203,6 +226,7 @@ func TestFetchLegacyReceipt_RejectsNonPDFResponse(t *testing.T) {
 	defer server.Close()
 
 	opts := []Option{withBaseURL(server.URL, "")}
+
 	_, err := fetchLegacyReceipt(context.Background(), resolveSettings(opts), "FT25062PP5ZB", "12345678")
 	if !errors.Is(err, ErrUnexpectedResponse) {
 		t.Fatalf("err = %v, want wrapped ErrUnexpectedResponse", err)
@@ -213,9 +237,12 @@ func TestFetchLegacyReceipt_BuildsIDQuery(t *testing.T) {
 	t.Parallel()
 
 	var gotRawQuery string
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotRawQuery = r.URL.RawQuery
+
 		w.Header().Set("Content-Type", "application/pdf")
+
 		receipt := buildReceiptPDF([]string{
 			"Payer : X",
 			"Account : 1000****0000",
@@ -230,16 +257,20 @@ func TestFetchLegacyReceipt_BuildsIDQuery(t *testing.T) {
 	defer server.Close()
 
 	opts := []Option{withBaseURL(server.URL, "")}
+
 	body, err := fetchLegacyReceipt(context.Background(), resolveSettings(opts), "FT25062PP5ZB", "12345678")
 	if err != nil {
 		t.Fatalf("fetchLegacyReceipt: %v", err)
 	}
+
 	if !strings.HasPrefix(gotRawQuery, "id=FT25062PP5ZB12345678") {
 		t.Errorf("RawQuery = %q, want id=FT25062PP5ZB12345678...", gotRawQuery)
 	}
+
 	if len(body) == 0 {
 		t.Error("body empty, want PDF bytes")
 	}
+
 	if json.Valid(body) {
 		t.Error("body is JSON, want a PDF document")
 	}

@@ -70,6 +70,7 @@ func parseReceipt(pdfBytes []byte) (*TransactionDetails, error) {
 	details.Date = parseLegacyDate(details.DateRaw)
 
 	var missing []string
+
 	for field, value := range map[string]string{
 		"payer":            details.Payer,
 		"payer_account":    details.PayerAccount,
@@ -81,15 +82,19 @@ func parseReceipt(pdfBytes []byte) (*TransactionDetails, error) {
 			missing = append(missing, field)
 		}
 	}
+
 	if details.Amount <= 0 {
 		missing = append(missing, "amount")
 	}
+
 	if details.Date.IsZero() {
 		missing = append(missing, "date")
 	}
+
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("%w: missing %s", ErrReceiptParse, strings.Join(missing, ", "))
 	}
+
 	return details, nil
 }
 
@@ -97,19 +102,23 @@ func parseReceipt(pdfBytes []byte) (*TransactionDetails, error) {
 // words that text extraction glues together ("PayerName" -> "Payer Name").
 func extractAllText(doc *pdf.Reader) string {
 	var rows []string
+
 	for i := 1; i <= doc.NumPage(); i++ {
 		page := doc.Page(i)
 		if page.V.IsNull() {
 			continue
 		}
+
 		pageRows, err := page.GetTextByRow()
 		if err != nil {
 			continue
 		}
+
 		for _, row := range pageRows {
 			rows = append(rows, repairGluedWords(joinWords(row.Content)))
 		}
 	}
+
 	return strings.Join(rows, " ")
 }
 
@@ -122,12 +131,15 @@ func normalizeDocumentText(raw string) string {
 
 func joinWords(words []pdf.Text) string {
 	var sb strings.Builder
+
 	for i, word := range words {
 		if i > 0 {
 			sb.WriteByte(' ')
 		}
+
 		sb.WriteString(word.S)
 	}
+
 	return sb.String()
 }
 
@@ -144,6 +156,7 @@ func nthMatch(text string, re *regexp.Regexp, n int) string {
 	if len(matches) <= n || len(matches[n]) < 2 {
 		return ""
 	}
+
 	return strings.TrimSpace(matches[n][1])
 }
 
@@ -153,12 +166,14 @@ func titleCase(name string) string {
 	if name == "" {
 		return ""
 	}
+
 	words := strings.Fields(strings.ToLower(name))
 	for i, word := range words {
 		runes := []rune(word)
 		runes[0] = unicode.ToUpper(runes[0])
 		words[i] = string(runes)
 	}
+
 	return strings.Join(words, " ")
 }
 
@@ -171,5 +186,6 @@ func parseLegacyDate(raw string) time.Time {
 			return parsed.UTC()
 		}
 	}
+
 	return time.Time{}
 }

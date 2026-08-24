@@ -41,6 +41,7 @@ func TestVerify_ValidationErrors(t *testing.T) {
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("err = %v, want wrapped %v", err, tt.want)
 			}
+
 			if result != nil {
 				t.Errorf("result = %+v, want nil on caller misuse", result)
 			}
@@ -59,6 +60,7 @@ func TestVerify_LegacyWithoutSuffixIsACallerError(t *testing.T) {
 
 func legacyTestServer(t *testing.T, lines []string) *httptest.Server {
 	t.Helper()
+
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
 		_, _ = w.Write(buildReceiptPDF(lines))
@@ -83,12 +85,15 @@ func TestVerify_LegacyMatchingReceiptIsValid(t *testing.T) {
 	if result.Status != StatusValid || !result.Valid {
 		t.Fatalf("Status = %s (%+v), want valid", result.Status, result.Mismatches)
 	}
+
 	if result.Backend != BackendLegacyPDF {
 		t.Errorf("Backend = %s, want legacy_pdf", result.Backend)
 	}
+
 	if result.Details == nil || result.Details.Reference != testLegacyReference {
 		t.Errorf("Details = %+v, want populated official record", result.Details)
 	}
+
 	if len(result.Mismatches) != 0 {
 		t.Errorf("Mismatches = %+v, want empty", result.Mismatches)
 	}
@@ -112,9 +117,11 @@ func TestVerify_LegacyAmountMismatch(t *testing.T) {
 	if result.Status != StatusMismatch || result.Valid {
 		t.Fatalf("Status = %s, want mismatch", result.Status)
 	}
+
 	if len(result.Mismatches) != 1 || result.Mismatches[0].Field != "amount" {
 		t.Fatalf("Mismatches = %+v, want a single amount mismatch", result.Mismatches)
 	}
+
 	if result.Details == nil {
 		t.Error("Details = nil, want the official record even on mismatch")
 	}
@@ -138,10 +145,12 @@ func TestVerify_LegacyReferenceMismatch(t *testing.T) {
 	if result.Status != StatusMismatch {
 		t.Fatalf("Status = %s, want mismatch", result.Status)
 	}
+
 	fields := map[string]bool{}
 	for _, m := range result.Mismatches {
 		fields[m.Field] = true
 	}
+
 	if !fields["reference"] {
 		t.Errorf("Mismatches = %+v, want a reference entry", result.Mismatches)
 	}
@@ -154,12 +163,15 @@ func TestVerify_LegacyURLSuppliesSuffix(t *testing.T) {
 	defer server.Close()
 
 	var gotID string
+
 	wrapped := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotID = r.URL.Query().Get("id")
+
 		w.Header().Set("Content-Type", "application/pdf")
 		_, _ = w.Write(buildReceiptPDF(fullReceiptLines()))
 	}))
 	defer wrapped.Close()
+
 	_ = gotID
 
 	result, err := Verify(context.Background(), Transaction{
@@ -170,6 +182,7 @@ func TestVerify_LegacyURLSuppliesSuffix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
+
 	if result.Status != StatusValid {
 		t.Fatalf("Status = %s (%+v), want valid", result.Status, result.Mismatches)
 	}
@@ -203,6 +216,7 @@ func TestVerify_JSONAPITokenFlow(t *testing.T) {
 	if result.Status != StatusValid {
 		t.Fatalf("Status = %s (%+v), want valid", result.Status, result.Mismatches)
 	}
+
 	if result.Backend != BackendJSONAPI {
 		t.Errorf("Backend = %s, want json_api", result.Backend)
 	}
@@ -227,6 +241,7 @@ func TestVerify_JSONAPINotFoundIsData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v, want nil for a business outcome", err)
 	}
+
 	if result.Status != StatusNotFound || result.Valid {
 		t.Fatalf("Status = %s Valid = %v, want not_found/false", result.Status, result.Valid)
 	}

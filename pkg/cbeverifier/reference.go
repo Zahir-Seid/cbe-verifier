@@ -58,12 +58,15 @@ func ClassifyReference(input string) Reference {
 	if ref, ok := extractLegacyURLData(trimmed); ok {
 		return Reference{Kind: RefLegacyURL, ID: ref.ID, Suffix: ref.Suffix}
 	}
+
 	if token, ok := extractNewCBEToken(trimmed); ok {
 		return Reference{Kind: RefNewToken, Token: token}
 	}
+
 	if legacyCBEReferenceRegex.MatchString(trimmed) {
 		return Reference{Kind: RefLegacy, ID: strings.ToUpper(trimmed)}
 	}
+
 	return Reference{Kind: RefUnknown}
 }
 
@@ -74,9 +77,11 @@ func extractNewCBEToken(input string) (string, bool) {
 	if m := newCBEURLRegex.FindStringSubmatch(input); m != nil {
 		return m[1], true
 	}
+
 	if !strings.HasPrefix(strings.ToUpper(input), "FT") && newCBETokenRegex.MatchString(input) {
 		return input, true
 	}
+
 	return "", false
 }
 
@@ -88,20 +93,25 @@ func extractLegacyURLData(input string) (Reference, bool) {
 	if err != nil {
 		return Reference{}, false
 	}
+
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return Reference{}, false
 	}
+
 	if parsed.Hostname() != "apps.cbe.com.et" {
 		return Reference{}, false
 	}
+
 	if port := parsed.Port(); port != "" && port != "100" {
 		return Reference{}, false
 	}
 
 	combined := strings.TrimSpace(parsed.Query().Get("id"))
+
 	m := legacyCombinedIDRegex.FindStringSubmatch(combined)
 	if m == nil {
 		return Reference{}, false
 	}
+
 	return Reference{ID: strings.ToUpper(m[1]), Suffix: m[2]}, true
 }

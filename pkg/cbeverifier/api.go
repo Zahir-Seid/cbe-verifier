@@ -57,9 +57,11 @@ func fetchTransactionJSON(ctx context.Context, s *settings, token string) (*Tran
 		if err == nil {
 			return details, nil
 		}
+
 		if !retryable {
 			return nil, err
 		}
+
 		lastErr = err
 	}
 
@@ -74,6 +76,7 @@ func fetchTransactionOnce(ctx context.Context, client *http.Client, s *settings,
 	if err != nil {
 		return nil, false, fmt.Errorf("%w: %w", ErrNetwork, err)
 	}
+
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Origin", "https://mbreciept.cbe.com.et")
@@ -95,6 +98,7 @@ func fetchTransactionOnce(ctx context.Context, client *http.Client, s *settings,
 		if err != nil {
 			return nil, false, fmt.Errorf("%w: reading response: %w", ErrUnexpectedResponse, err)
 		}
+
 		if len(body) > maxResponseBodyBytes {
 			return nil, false, fmt.Errorf("%w: response exceeds %d bytes", ErrUnexpectedResponse, maxResponseBodyBytes)
 		}
@@ -103,6 +107,7 @@ func fetchTransactionOnce(ctx context.Context, client *http.Client, s *settings,
 		if err := json.Unmarshal(body, &payload); err != nil {
 			return nil, false, fmt.Errorf("%w: decoding JSON: %w", ErrUnexpectedResponse, err)
 		}
+
 		return mapJSONReceipt(payload), false, nil
 
 	case resp.StatusCode == http.StatusNotFound:
@@ -120,6 +125,7 @@ func fetchTransactionOnce(ctx context.Context, client *http.Client, s *settings,
 // the canonical Reference; amountCredited arrives as a decimal string.
 func mapJSONReceipt(p cbeTransactionResponse) *TransactionDetails {
 	date := time.Time{}
+
 	dateRaw := ""
 	if len(p.DateTimes) > 0 {
 		dateRaw = strings.TrimSpace(p.DateTimes[0])
@@ -148,10 +154,12 @@ func mapJSONReceipt(p cbeTransactionResponse) *TransactionDetails {
 // returning 0 for anything unparseable.
 func parseDecimal(value string) float64 {
 	cleaned := strings.ReplaceAll(strings.TrimSpace(value), ",", "")
+
 	amount, err := strconv.ParseFloat(cleaned, 64)
 	if err != nil || math.IsNaN(amount) || math.IsInf(amount, 0) {
 		return 0
 	}
+
 	return amount
 }
 
@@ -183,8 +191,10 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return ctx.Err()
 	}
+
 	timer := time.NewTimer(d)
 	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
