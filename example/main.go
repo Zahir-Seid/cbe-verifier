@@ -1,67 +1,88 @@
-// Package main provides a command-line interface to verify CBE transactions
-// go run main.go --id=xxxxxxx --suffix=xxxxxxx --amount=xxxx.xx
+// Command cbeverify verifies a Commercial Bank of Ethiopia payment receipt
+// against official CBE records.
+//
+// The reference may be a bare legacy reference, a full receipt URL from
+// either platform, or a new-platform token; the backend is selected
+// automatically.
+//
+//	go run ./example --reference FT25062PP5ZB --suffix 12345678 --amount 1500
+//	go run ./example --reference "https://mbreciept.cbe.com.et/AbCdEf123456789" --amount 250
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"os"
+	"time"
 
-	"github.com/Zahir-Seid/cbe-verifier/cbeverifier"
+	cbeverifier "github.com/Zahir-Seid/cbe-verifier/v2/pkg/cbeverifier"
 )
 
 func main() {
-	// Define CLI flags
-	id := flag.String("id", "", "Transaction reference ID (e.g., FTxxxxxxxxx)")
-	suffix := flag.String("suffix", "", "Transaction suffix (e.g., xxxxxxxx)") // Account suffix is the number after 1000 in CBE aacounts
-	amount := flag.Float64("amount", 0.0, "Transaction amount in ETB (e.g., xxxx.xx)")
-	includeDetails := flag.Bool("details", true, "Include full transaction details")
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
 
-	flag.Parse()
+func run(args []string, stdout, stderr *os.File) int {
+	fs := flag.NewFlagSet("cbeverify", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	reference := fs.String("reference", "", "payment reference, receipt URL, or new-platform token (required)")
+	suffix := fs.String("suffix", "", "payer account suffix; required for bare legacy references")
+	amount := fs.Float64("amount", 0, "expected amount in ETB (required)")
+	timeout := fs.Duration("timeout", cbeverifier.DefaultTimeout, "per-request HTTP timeout")
 
-	// Validate required fields
-	if *id == "" || *suffix == "" || *amount <= 0 {
-		fmt.Fprintln(os.Stderr, "Usage:")
-		flag.PrintDefaults()
-		os.Exit(1)
+	if err := fs.Parse(args); err != nil {
+		return 2
 	}
 
-	// Construct transaction
-	transaction := cbeverifier.Transaction{
-		ID:     *id,
-		Suffix: *suffix,
-		Amount: *amount,
+	if err := validateFlags(reference, amount); err != nil {
+		fmt.Fprintln(stderr, err) //nolint:errcheck // best-effort diagnostics to stderr
+
+		fs.Usage()
+
+		return 2
 	}
 
-	// Options
-	options := cbeverifier.Options{
-		IncludeDetails: *includeDetails,
-		Timeout:        120,
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout+30*time.Second)
+	defer cancel()
 
-	// Verify transaction
-	result, err := cbeverifier.Verify(transaction, options)
+	result, err := cbeverifier.Verify(ctx, cbeverifier.Transaction{
+		Reference: *reference,
+		Suffix:    *suffix,
+		Amount:    *amount,
+	}, cbeverifier.WithTimeout(*timeout))
 	if err != nil {
-		log.Fatalf("Verification error: %v\n", err)
+		fmt.Fprintf(stderr, "cbeverify: %v\n", err) //nolint:errcheck // best-effort diagnostics to stderr
+
+		return 2
 	}
 
-	if result.IsValid {
-		fmt.Println("Transaction verified successfully.")
-		if result.Details != nil {
-			fmt.Printf("Amount: %.2f ETB\n", result.Details.Amount)
-			fmt.Printf("Payer: %s\n", result.Details.Payer)
-			fmt.Printf("Receiver: %s\n", result.Details.Receiver)
-			fmt.Printf("Date: %s\n", result.Details.Date)
-			fmt.Printf("Reason: %s\n", result.Details.Reason)
-		}
-	} else {
-		fmt.Printf(" Verification failed: %s\n", result.Error)
-		if result.Mismatches != nil {
-			fmt.Println("Mismatches:")
-			for field, mismatch := range result.Mismatches {
-				fmt.Printf("  - %s: %v\n", field, mismatch)
-			}
-		}
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+
+	if err := enc.Encode(result); err != nil {
+		fmt.Fprintf(stderr, "cbeverify: encode output: %v\n", err) //nolint:errcheck // best-effort diagnostics to stderr
+
+		return 2
 	}
+
+	if !result.Valid {
+		return 1
+	}
+
+	return 0
+}
+
+func validateFlags(reference *string, amount *float64) error {
+	if *reference == "" {
+		return errors.New("cbeverify: -reference is required")
+	}
+
+	if *amount <= 0 {
+		return errors.New("cbeverify: -amount must be greater than zero")
+	}
+
+	return nil
 }
